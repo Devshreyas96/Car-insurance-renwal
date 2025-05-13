@@ -1,0 +1,634 @@
+---
+title: "Advanced Topics in Data Analytics - Predicting Insurance Renewals"
+author: "100442091"
+format: 
+    pdf:
+      highlight-style: github
+      documentclass: scrreprt
+      code-overflow: wrap
+      number-sections: true
+      toc: true
+      toc-depth: 3
+      toc-location: body  
+      toc-expand: true
+      toc-title: "Table of Contents"
+editor: visual
+---
+
+\newpage
+
+# Executive Summary
+
+The current analytically endeavor focuses on the analysis of a motor insurance data set to inform the pricing strategies of a motor insurance company. Specifically, the aim is to understand the factors that influence customers' policy renewal decisions. Secondary quantitative data will be collected from approximately 20,020 customers, and the analysis will include demographic details, vehicle specifications, and the relationship between the customer and the insurance company. Starting the analysis with a look at the distribution of marital status, we see that people are mostly married (53.87%) and single (58.9%), with smaller percentages of divorced (7.8%), widowed (22.6%) and separated (42.4%). The distributions are visually presented in a bar chart highlighting the prevalence of married and single persons. Key demographic characteristics include age, gender and marital status, while customer-insurer relationships are represented by length of relationship with current insurer. Car details such as value and mileage are also taken into account. Logistic regression is employed as a quantitative method to investigate the influence of various factors on decisions on renewal. Because the dependent variable, the decision to renew, is binary (values of 1 for renewal and 0 for non-renewal), logistic regression was selected. First, the descriptive findings reveal that, with an average age of 44.7 years, male clients predominate. More than half of clients renew their policies, and most select monthly payment options. The analysis reveals a significant impact of price and percentage change in price on renewal decisions, with both having a negative effect. Based on these findings, it's recommended that motor insurers develop effective pricing strategies. Prices should be set at a level that is affordable and satisfactory for all customers. Lowering insurance prices can attract more renewals, while minimizing year-on-year price fluctuations can improve renewal rates. Implementing these recommendations will enable the company to optimize its pricing models, potentially improving customer retention and overall business performance in the competitive motor insurance market. By using the results of the analysis, the company can make informed decisions and strategically position itself in terms of policy pricing to meet customer demand and satisfaction, thus ensuring long-term success in the market. (Ali and Anwar, 2021).
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(caret)
+library(dplyr)
+library(readxl)
+library(corrplot)
+library(ggplot2)
+library(pROC)
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+# Introduction
+
+The primary objective of this analysis was to analyse car insurance data to inform the company's pricing strategies. Through a thorough examination of the dataset, we aimed to uncover the key factors influencing customers' decisions to renew their policies. The dataset included detailed information on over 20,000 customers and their renewal outcomes.
+
+It provided insights into customer demographics, including age, gender and marital status, and how these factors influence renewal behaviour. For example, older or married customers may have different renewal patterns than younger or single customers. Gender differences can also influence decisions, reflecting different preferences and risk perceptions.
+
+Furthermore, the dataset included key details about customers' vehicles, such as value and annual mileage. These factors help to measure risk and value perceptions from the customer's perspective. High value or low mileage cars may indicate greater satisfaction with cover, which may correlate with higher renewal rates. Conversely, customers with lower-value or higher-mileage cars may prioritise price, influencing their renewal decisions. (Duan et al., 2018).
+
+Additionally, the dataset included variables related to the policy itself, such as no-claims bonus duration, payment method, purchase channel, and tenure with the current provider. These factors significantly influence renewal likelihood; for example, longer tenure or substantial no-claims bonuses may foster loyalty and thus increase renewal likelihood.
+
+# Data Cleaning and Preparation
+
+The data set contains information on 20,020 customers and their car insurance renewal decisions. The data includes various demographic, car-related and insurer relationship variables. 
+
+## Data Staging
+
+The structure and substance of the dataset were thoroughly analyzed during the initial data import and inquiry. There are fourteen variables in the dataset that cover client demographics, car attributes, and insurance policies. Rows without price information were carefully deleted because of how important the price variable is. This important stage guaranteed the accuracy and usefulness of the dataset for further investigation.
+
+```{r}
+insurance_data <- readxl::read_excel("/Users/devshreyas/Downloads/insurance_data_2024.xlsx") %>% 
+  janitor::clean_names(.)
+
+insurance_data
+```
+
+-   Cleaning data
+
+```{r}
+insurance_data <- insurance_data %>% 
+  filter(!is.na(price))
+head(insurance_data)
+
+# View the structure of your dataset
+str(insurance_data)
+
+# Remove any duplicate rows
+data <- distinct(insurance_data)
+
+# Remove rows with missing values
+data <- na.omit(insurance_data)
+
+# Write the cleaned dataset to a new file
+write.csv(data, "cleaned_dataset.csv", row.names = TRUE)
+```
+
+## Removing NA
+
+```{r}
+insurance_data <- insurance_data %>%
+  filter(!is.na(price))
+```
+
+## Removing
+
+```{r}
+insurance_data <- insurance_data %>%
+  filter(gender!="C")
+```
+
+## Encoding Categorical Variables
+
+Using the mutate function from the dplyr package, this procedure turns the pertinent columns---marital_status, gender, payment_method, acquisition_channel, and renewed---into factor data types. In order to ensure that analytical techniques and models accurately understand the categorical data, encoding these variables as factors is essential for accurate and meaningful analysis. We can examine links and patterns more efficiently by converting these columns, particularly in tasks involving classification or visualizations. In order to ensure that the dataset is appropriately formatted for additional analysis, the last step, str(insurance_data), verifies the modifications by checking that the designated columns have been effectively converted to factors.
+
+```{r}
+# Convert categorical variables to factors
+insurance_data <- insurance_data %>%
+  mutate(
+    marital_status = factor(marital_status, exclude = NULL),
+    gender = factor(gender, exclude = NULL),
+    payment_method = factor(payment_method, exclude = NULL),
+    acquisition_channel = factor(acquisition_channel, exclude = NULL),
+    renewed = factor(renewed, exclude = NULL))
+```
+
+## Data Inspection
+
+Using the str(insurance_data) function, we perform a first assessment of the dataset in this section of the code to determine its contents and structure. This function gives a brief overview of the dataframe, describing the data types in each column and showing a sample of the first few rows. By doing this, we can ascertain quickly whether the data is in the anticipated format and the variables are encoded correctly. This important step ensures that future analyses are based on clean, precisely organized data by assisting in the early detection of any potential problems. The dataset is verified to be prepared for further in-depth processing and analysis by this inspection.
+
+```{r}
+str(insurance_data)
+```
+
+```{r}
+colnames(insurance_data)
+```
+
+## Descriptive Analytics
+
+Descriptive analytics analyses historical data to find trends, patterns and insights that can be used to explain past events in a system or business. It provides a concise summary of historical performance by using statistical metrics, charts and graphs to summarise and visualise data. Prescriptive and predictive analytics, two more sophisticated methods, are informed by the retrospective view provided by this basic type of analytics, which also helps to understand the current state of the organisation.
+
+## Data Highight
+
+```{r}
+summary(insurance_data)
+```
+
+# Frequency charts for the varibales
+
+-   Marital Status
+
+```{r}
+insurance_data <- insurance_data %>% 
+  mutate(new_marital_status = case_when(
+    marital_status =="M" ~ "Maried",
+    TRUE ~ "Not Maried"
+  )) %>% 
+  mutate(new_marital_status = factor(new_marital_status, 
+                                     levels = c("Not Maried","Maried"), 
+                                     labels = c("Not Maried","Maried")))
+
+```
+
+-   Gender
+
+Filter out the gender with label `C` because we have no idea what is it
+
+```{r}
+insurance_data <- insurance_data %>% 
+  filter(gender!="C")
+
+insurance_data$gender <- factor(insurance_data$gender, levels = c("M","F"),
+                                labels = c("Male","Female"))
+```
+
+-   Acquisition Channel
+
+```{r}
+## Payment Method
+AcquisitiopnChannel_percentage<-prop.table(table(insurance_data$`Acquisition Channel`))*100
+AcquisitiopnChannel_percentage
+PaymentMethod_dataframe<-data.frame("Acquisition Channel" = c("Aggreg","Direct","Inbound ","Outbound"),
+                                    "Percentage"=c(0.059,19.67,80.25,0.015))
+
+PaymentMethod_dataframe
+```
+
+# Descriptive Analytics
+
+At first a descriptive analysis was carried out to explore the features of the data. The findings from the EDA shall be discussed in this sub section. Initially the data contained 20020 rows and 16 columns. There were some rows in the data with missing entries. There were only 3 such rows and they were removed. Data considered for the final analysis contained 19996 rows and 16 columns.
+
+```{r}
+table1::table1(~price|gender,data = insurance_data)
+```
+
+The table shows price data for an unspecified item, categorised by sex and in total. On average, men pay more than women (mean: 436 vs. 406), with a wider price range for men (98.8 to 4360) compared to women (96 to 4450). However, the median price for males (367) is only slightly higher than for females (347), suggesting that the distribution is skewed by higher prices on the male side. The overall average and median prices fall between the male and female figures.
+
+```{r}
+table1::table1(~price+car_value+years_of_no_claims_bonus+annual_mileage|gender+new_marital_status,data = insurance_data)
+```
+
+The table shows information on annual mileage, years of no claims bonus, automobile values, and car insurance costs broken down by gender and marital status (married or single). In general, married people pay less for insurance and enjoy longer years of no claims bonus than single people. In addition to having higher automobile values than women, men typically pay higher insurance premiums. Across all marital statuses, men tend to drive more than women in terms of annual mileage.
+
+## Marital Status Distribution
+
+```{r}
+MaritalStatus_percentage<-prop.table(table(insurance_data$`Marital Status`))*100
+MaritalStatus_dataframe<-data.frame("Marital Status" = c("D","M","S","V","W"),
+                             "percentage" = c(.078,.5387,.589,.424,.226))
+MaritalStatus_dataframe
+#Set up the basic pie chart using ggplot
+
+pie_chart <- ggplot(MaritalStatus_dataframe, aes(x = "", y = percentage, fill = Marital.Status)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void()  # Remove background and grid lines
+
+# Add percentage labels
+pie_chart2 <- pie_chart +
+  geom_text(aes(label = paste0(sprintf("%.1f", percentage * 100), "%")),
+            position = position_stack(vjust = 0.5), size = 4)
+
+# Add a legend
+pie_chart2 <- pie_chart2 +
+  scale_fill_discrete(name = "Legend")
+
+# Display the pie chart
+print(pie_chart2)
+```
+
+The pie chart illustrates the distribution of marital status within a data set. Each slice represents a different marital status category, and the size of each slice is proportional to the percentage of individuals falling into that category.
+
+The largest category is 'M', which accounts for approximately 54% of the data set. This suggests that 'M' marital status is the most common within the data set. The next largest categories are 'S' (6%), followed by 'V' (4%), 'W' (2%) and 'D' (1%).
+
+Without knowing what each marital status code represents, it's difficult to draw further conclusions from the data. However, the pie chart provides a clear visual representation of the relative frequency of each marital status within the data set.
+
+## Payment Method Distribution
+
+```{r}
+## Payment Method
+PaymentMethod_percentage<-prop.table(table(insurance_data$`Payment Method`))*100
+PaymentMethod_dataframe<-data.frame("Payment Method" = c("Annual","Monthly"),
+                                    "percentage" = c(.2743,.7257))
+PaymentMethod_dataframe
+#Set up the basic pie chart using ggplot
+
+pie_chart <- ggplot(PaymentMethod_dataframe, aes(x = "", y = percentage, fill = Payment.Method)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void()  # Remove background and grid lines
+
+# Add percentage labels
+pie_chart3 <- pie_chart +
+  geom_text(aes(label = paste0(sprintf("%.1f", percentage * 100), "%")),
+            position = position_stack(vjust = 0.5), size = 4)
+
+# Add a legend
+pie_chart3 <- pie_chart3 +
+  scale_fill_discrete(name = "Legend")
+
+# Display the pie chart
+print(pie_chart3)
+```
+
+The pie chart illustrates the distribution of payment frequencies among customers. It shows that the majority of customers (72.6%) prefer to make payments on a monthly basis, while a smaller portion (27.4%) opt for annual payments.
+
+## Gender Distribution
+
+```{r}
+## Creating pie charts for categorical variables
+Gender_percentage<-prop.table(table(insurance_data$Gender))*100
+Gender_dataframe<-data.frame("Gender" = c("F","M"),
+                                  "percentage" = c(.4523,.5466))
+Gender_dataframe
+
+pie_chart <- ggplot(Gender_dataframe, aes(x = "", y = percentage, fill = Gender)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void()  
+pie_chart1 <- pie_chart +
+  geom_text(aes(label = paste0(sprintf("%.1f", percentage * 100), "%")),
+            position = position_stack(vjust = 0.5), size = 4)
+pie_chart1 <- pie_chart1 +
+  scale_fill_discrete(name = "Legend")
+
+print(pie_chart1)
+```
+
+The statement that "the maximum percentage of clients were female" is incorrect based on the data provided. In fact, male customers make up the majority of the sample (54.67%), while female customers make up 45.23%. There is also a small proportion (0.1%) of customers whose gender is unknown.
+
+-   Price density by accepting the marital status.
+
+-   Price density by accepting the insurance quote or not
+
+```{r}
+insurance_data %>% 
+  ggplot(aes(x=price,y=renewed))+geom_point()
+```
+
+The scatterplot shows the relationship between car insurance prices and whether a customer renewed their policy (1) or not (0). Key observations: - No clear price trend: Prices vary widely for both renewed and non-renewed policies. - Consistent density: Density remains steady across price range, especially for non-renewed policies. - Slight variation for renewals: Renewed policies show slightly higher density at lower prices. Exact points: - No renewal (0): High density maintained throughout price range (0 to 4000). - Renewed (1): Density relatively high (0 to 1000), slight decrease above 1000.
+
+## Variable Dependency Analysis
+
+-   Variable dependency analysis in Age vs Price
+
+```{r}
+# Plot 1: Age vs Price
+ggplot(insurance_data, aes(x = age, y = price)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Age vs Price", x = "Age", y = "Price") +
+  theme_minimal()
+```
+
+The scatter plot illustrates the relationship between age and car insurance price. It reveals no clear linear relationship, as the price distribution remains relatively consistent across different age groups, with a wide price range for each age. However, there's a subtle trend of decreasing price variation as age increases, suggesting younger individuals face a broader range of prices compared to older customers.
+
+-   Variable dependency analysis in Car Value vs Price
+
+```{r}
+# Plot 2: Car Value vs Price
+ggplot(insurance_data, aes(x = car_value, y = price)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Car Value vs Price", x = "Car Value", y = "Price") +
+  theme_minimal()
+```
+
+The scatter plot shows a positive correlation between Car Value and Price: higher car values generally correspond to higher prices. There is a dense cluster of lower-valued cars (0 to 10,000) priced between 0 and 1000, indicating many low-value, low-price cars. As car values increase beyond 20,000, data points become sparser, and price variability increases, with some notable outliers. This suggests a non-linear relationship, where price spreads widen with car value, influenced by factors like brand, model, and condition. The overall trend highlights a general but variable increase in price with higher car values.
+
+-   Variable dependency analysis Annual Mileage vs Price
+
+```{r}
+# Plot 3: Annual Mileage vs Price
+ggplot(insurance_data, aes(x = annual_mileage, y = price)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Annual Mileage vs Price", x = "Annual Mileage", y = "Price") +
+  theme_minimal()
+```
+
+The scatter plot shows a negative correlation between Annual Mileage and Price: higher annual mileage generally corresponds to lower prices. There is a high density of lower-mileage cars (up to 10,000 miles) with prices clustering between 0 to 1000. As mileage increases from 10,000 to 20,000, prices generally decrease, with fewer high-price outliers. Beyond 20,000 miles, data points become sparse, indicating fewer cars and generally lower prices. Some high-mileage cars are priced higher, likely due to other factors like condition or brand. Overall, higher annual mileage tends to reduce car prices.
+
+-   Variable dependency analysis Years of No Claims Bonus vs Price
+
+```{r}
+# Plot 4: Years of No Claims Bonus vs Price
+ggplot(insurance_data, aes(x = years_of_no_claims_bonus, y = price)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Years of No Claims Bonus vs Price", x = "Years of No Claims Bonus", y = "Price") +
+  theme_minimal()
+```
+
+The scatter plot reveals a strong negative correlation between the number of years of no claims bonus and car insurance prices. As the years of claim-free driving increase, insurance premiums decrease significantly. This is evident in the downward trend and the narrowing range of prices for higher no claims bonus levels. Notably, individuals with 7 or more years of no claims bonus experience the most consistent and lowest prices. However, outliers exist, especially among those with minimal claim-free driving, indicating that other factors also influence premium calculations.
+
+-   Variable dependency analysis Years of Gender vs Price
+
+```{r}
+# Plot 5: Gender vs Price
+ggplot(insurance_data, aes(x = gender, y = price)) +
+  geom_boxplot() +
+  labs(title = "Gender vs Price", x = "Gender", y = "Price") +
+  theme_minimal()
+```
+
+The box plot compares car insurance prices between males and females. Both genders have a similar median price, indicating that, on average, insurance costs are comparable. However, the price range for males is slightly wider, as shown by the larger interquartile range (IQR). This suggests greater variability in prices among males. Outliers exist for both genders, indicating some individuals pay much higher premiums. Overall, while the average cost is similar, there's more price variation for males compared to females in this dataset.
+
+-   Variable dependency analysis Years of Marital Status vs Price
+
+```{r}
+# Plot 6: Marital Status vs Price
+ggplot(insurance_data, aes(x = marital_status, y = price)) +
+  geom_boxplot() +
+  labs(title = "Marital Status vs Price", x = "Marital Status", y = "Price") +
+  theme_minimal()
+```
+
+The box plot illustrates the distribution of car insurance prices (Price) across different marital statuses (Marital Status). The median price is highest for marital status 'S', followed by 'M' and 'W', while 'D' and 'V' have the lowest median prices. The interquartile range (IQR), which represents the middle 50% of the prices, is largest for 'S' and 'M', indicating greater price variation within these groups. All categories have outliers, particularly 'M' and 'S', indicating a few individuals with unusually high insurance costs within these groups.
+
+-   Variable dependency analysis Years of Payment Method vs Price
+
+```{r}
+# Plot 7: Payment Method vs Price
+ggplot(insurance_data, aes(x = payment_method, y = price)) +
+  geom_boxplot() +
+  labs(title = "Payment Method vs Price", x = "Payment Method", y = "Price") +
+  theme_minimal()
+```
+
+The box plot compares insurance prices by payment frequency: annual or monthly. The median prices are similar, indicating no significant average price difference. However, monthly payments have a larger interquartile range (IQR), indicating greater price variability, with more outliers and higher premiums. While average prices appear similar, monthly payments entail a wider range of potential costs, including exceptionally high premiums.
+
+-   Variable dependency analysis Years of Acquisition Channel vs Price
+
+```{r}
+# Plot 8: Acquisition Channel vs Price
+ggplot(insurance_data, aes(x = acquisition_channel, y = price)) +
+  geom_boxplot() +
+  labs(title = "Acquisition Channel vs Price", x = "Acquisition Channel", y = "Price") +
+  theme_minimal()
+```
+
+The box plot illustrates the distribution of insurance prices across different acquisition channels. "Inbound has the highest median price, followed by Direct and Outbound, with Aggreg having the lowest."Inbound" also has the widest range of prices, with many outliers at higher values, indicating that some customers acquired through this channel pay significantly more. "Direct" and "Outbound" show less price variation, while "Aggreg" has the most consistent pricing with few outliers. Overall, the acquisition channel appears to influence the price of insurance, with inbound potentially leading to higher costs
+
+-   Variable dependency analysis Years of Tenure with Current Provider vs Price
+
+```{r}
+# Plot 9: Years of Tenure with Current Provider vs Price
+ggplot(insurance_data, aes(x = years_of_tenure_with_current_provider, y = price)) +
+  geom_point(alpha = 0.6) +
+  geom_hline(yintercept = 1) +
+  labs(title = "Years of Tenure with Current Provider vs Price", x = "Years of Tenure with Current Provider", y = "Price") +
+  theme_minimal()
+```
+
+The scatter plot shows the relationship between the number of years a customer has been with their current car insurance provider and the price they pay. There is no clear linear relationship between tenure and price, as prices are widely spread across all tenure levels. However, the range of prices appears to be slightly narrower for customers with longer tenures, suggesting a possible weak trend towards price stability as loyalty increases. Notably, there are outliers at all tenure levels, suggesting that other factors besides tenure have a significant impact on pricing.
+
+-   Variable dependency analysis Renewed vs Price
+
+```{r}
+# Plot 10: Renewed vs Price
+ggplot(insurance_data, aes(x = price, fill = factor(renewed))) +
+  geom_histogram(position = "dodge", binwidth = 50, color = "black") +  # Adjust binwidth as needed
+  labs(title = "Price vs Renewal Rates", x = "Price", y = "Count", fill = "Renewed") +
+  scale_fill_manual(values = c("1" = "#0073C2FF", "0" = "#EFC000FF"), 
+                    labels = c("Not Renewed", "Renewed")) +  # Custom colors and labels
+  theme_minimal()
+```
+
+The relationship between policy prices and renewal rates can be easily seen in this histogram. It demonstrates that plans with lower prices are more prevalent and have greater renewal rates, while policies with higher prices are less prevalent and have fewer renewals. This information may be useful in analyzing how customers renew insurance plans in light of cost.
+
+## Summary Statistics
+
+```{r}
+#summary statistics or entire dataset
+summary(insurance_data)
+
+# Using reframe() to get summary statistics
+summary_stats <- insurance_data %>%
+  group_by(marital_status) %>%
+  reframe(
+    count = n(),
+    avg_price = mean(price, na.rm = TRUE),
+    median_price = median(price, na.rm = TRUE),
+    sd_price = sd(price, na.rm = TRUE)
+  )
+
+print(summary_stats)
+```
+
+This study investigated factors influencing car insurance renewal decisions using logistic regression analysis. The dataset included various customer and policy-related variables, with the renewal decision as the binary outcome (1 for renewal, 0 for non-renewal). The most common marital status in the sample was "S," and males slightly outnumbered females. Logistic regression modeled the probability of renewal based on factors like marital status, age, gender, price, and price change from the previous year. The study's findings can help insurers understand customer behavior and tailor strategies to improve renewal rates.
+
+## Outlier Detection
+
+```{r}
+# Remove rows where price is empty or not given
+insurance_data <- insurance_data %>%
+  filter(!is.na(price) & price != "")
+
+# Identify numeric columns for scaling
+numeric_columns <- insurance_data %>% select(where(is.numeric)) %>% names()
+
+# Function to detect outliers using IQR
+detect_outliers_iqr <- function(df, column) {
+  Q1 <- quantile(df[[column]], 0.25)
+  Q3 <- quantile(df[[column]], 0.75)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  outliers <- df %>%
+    filter(df[[column]] < lower_bound | df[[column]] > upper_bound)
+  return(outliers)
+}
+
+# Apply the outlier detection function to each numeric column
+outlier_list <- lapply(numeric_columns, function(col) detect_outliers_iqr(insurance_data, col))
+
+# Combine the outlier results into a data frame
+outliers <- bind_rows(outlier_list)
+
+# Install ggplot2 if not already installed
+if (!require("ggplot2")) install.packages("ggplot2")
+
+# Load ggplot2
+library(ggplot2)
+
+# Create box plots for each numeric column
+boxplots <- lapply(numeric_columns, function(col) {
+  ggplot(insurance_data, aes_string(x = "1", y = col)) +
+    geom_boxplot() +
+    labs(title = paste("Box plot of", col), x = "", y = col)
+})
+
+# Display the box plots
+for (plot in boxplots) {
+  print(plot)
+}
+```
+
+## Correlation Analysis
+
+Correlation analysis was used to examine the relationships between quantitative variables. This method calculates the correlation coefficient, which indicates the direction and strength of the relationship between two variables. The correlation matrix below shows the results of these associations.
+
+```{r}
+
+# Select numerical variables for correlation analysis
+numerical_data <- insurance_data %>%
+  select(age, car_value, years_of_no_claims_bonus, annual_mileage, price, actual_change_in_price_vs_last_year, percent_change_in_price_vs_last_year, years_of_tenure_with_current_provider, grouped_change_in_price)
+
+# Compute the correlation matrix
+correlation_matrix <- cor(numerical_data, use = "complete.obs")
+
+# Print the correlation matrix
+print(correlation_matrix)
+
+# Visualize the correlation matrix with improved readability
+corrplot(correlation_matrix, method = "color", addCoef.col = "black", tl.col = "black", tl.srt = 45, tl.cex = 0.6, type = "lower", diag = FALSE,number.cex = 0.4)  
+
+```
+
+The correlation matrix shows the relationships between variables in the car insurance data. The strongest positive correlation is between years of no claims bonus and car value (0.35), suggesting that customers with more years of no claims have more valuable cars. The strongest negative correlation is between years of no-claims bonus and price (-0.4), suggesting that a claim-free history leads to lower premiums. Age, mileage and ownership have weak correlations with price, suggesting they have less impact on premiums.
+
+# Predictive Model
+
+A predictive model is a statistical or machine learning method used to forecast future outcomes based on historical data. By analyzing patterns and relationships in the data, these models can classify new data points or make predictions. Here's a more detailed explanation:
+
+Predictive models are powerful tools that use data to anticipate future events, enhancing strategic planning and decision-making across various industries.
+
+## Logistic Regression Analysis
+
+The study examined the various factors that influence customers' decisions to renew their auto insurance with the provider. The renewal decision was represented as a binary variable: a value of 1 indicated that the customer renewed their policy, while a value of 0 indicated that they did not.
+
+```{r}
+# Regression Analysis
+
+# remove the row 15143 
+insurance_data$row_index <- 1:nrow(insurance_data) 
+
+insurance_data <- insurance_data %>% 
+  filter(row_index!=15143)
+```
+
+-   Lets stage the dependent variable to a numeric factor
+
+```{r}
+insurance_data$renewed <- ordered(insurance_data$renewed)
+```
+
+-   Build the model
+
+```{r}
+logistic_regression_model1 <- glm(renewed~new_marital_status+age+gender+price+
+                                    percent_change_in_price_vs_last_year, 
+                                  data = insurance_data, 
+                                  family = "binomial")
+```
+
+```{r}
+summary(logistic_regression_model1)
+```
+```{r}
+broom::tidy(logistic_regression_model1,exponentiate = TRUE,digits = 2) %>% 
+  mutate(estimate = round(estimate,3)) %>% 
+  mutate(p.value = round(p.value,3)) %>% 
+  select(term,estimate,p.value) %>% 
+  ggplot(aes(x=term,y=estimate))+geom_bar(stat="identity")+geom_hline(yintercept = 1)+
+  coord_flip()
+```
+
+-   Predict the probabilities
+
+A statistical or machine learning method for forecasting future results based on past data is called a predictive model. These models classify new data points or provide forecasts by examining patterns and relationships in the data. Here's a more thorough explanation: Strong instruments known as predictive models use data to predict future events, improving strategic planning and decision-making in a variety of businesses.
+
+```{r}
+model_prediction <- predict(logistic_regression_model1, type = "response")
+
+model_pred_actual <- ifelse(model_prediction>0.5, 1, 0)
+
+conf_matrix <- confusionMatrix(factor(model_pred_actual), factor(insurance_data$renewed))
+
+print(conf_matrix)
+      
+my_roc <- roc(response = model_pred_actual, predictor = insurance_data$renewed)
+
+```
+
+A logistic regression model was developed to predict motor insurance renewal. The model outperformed the baseline lapse rate with an accuracy of 63.64% (95% CI: 62.97%-64.3%). While it excelled at predicting non-renewals (95.60% specificity), its ability to predict renewals was lower (11.22% sensitivity). The positive predictive value (60.89%) and negative predictive value (63.84%) indicate the model's accuracy in predicting renewals and non-renewals, respectively. Despite its limitations in predicting the less frequent class (renewals), the model proved to be significantly better than random guessing, with a low kappa of 0.0812. Further refinements are recommended to achieve a more balanced prediction performance.
+
+```{r}
+plot(my_roc)
+```
+
+```{r}
+insurance_data %>% 
+     mutate(model_prediction = predict(logistic_regression_model1,type="response")) %>% 
+     ggplot(aes(y=model_prediction,x=percent_change_in_price_vs_last_year))+
+  geom_point(size=0.03)+xlim(-50,50)+labs(x="Discount %",y="Probability of Accepting", 
+                                          title="Effect of Discount on Renewal")
+```
+
+## Price Elasticity Model
+
+```{r}
+price_elasticity_model1 <- glm(renewed~price+percent_change_in_price_vs_last_year, 
+                                  data = insurance_data, 
+                                  family = "binomial")
+```
+
+```{r}
+summary(price_elasticity_model1)
+```
+
+```{r}
+broom::tidy(price_elasticity_model1,exponentiate = TRUE,digits = 2) %>% 
+  mutate(estimate = round(estimate,3)) %>% 
+  mutate(p.value = round(p.value,3)) %>% 
+  select(term,estimate,p.value) %>% 
+  ggplot(aes(x=term,y=estimate))+geom_bar(stat="identity")+geom_hline(yintercept = 1)+
+  coord_flip()
+
+```
+
+This bar chart shows how changes in the price of items affect the percentage change in price from the previous year. Higher current prices are associated with greater percentage increases.  However, if an item's price increased a lot last year, it's likely to have a smaller increase this year. The bar for (Intercept) indicates a baseline average price increase even when current price and last year's change are zero. The bars crossing the vertical line at 1 suggest these relationships are statistically significant. Remember, this is a simplified model, and other factors not shown could also influence price chan
+
+
+```{r}
+model_pred_actual <- ifelse(model_prediction>0.5, 1, 0)
+
+my_roc <- roc(response = model_pred_actual, predictor = insurance_data$renewed)
+```
+
+```{r}
+plot(my_roc)
+```
+
+# Findings
+
+-   Factors influencing the renewal rate: A number of factors, including customer satisfaction, claims experience, perceived value of the policy, loyalty programmes and demographics such as age, gender and income, have a significant impact on renewal rates. Policy features and customer service levels are also important.
+-   Price and renewal rates: Price often has a significant impact on renewal rates. Customers are generally less likely to renew if they perceive the price to be too high, while competitive pricing can encourage renewals. This relationship can be analysed using elasticity analysis, which quantifies how sensitive renewal rates are to price changes.
+-   What are the key factors that affect customers' response to price increase (also seen as price elasticity)? Several factors influence customer response to price increases, including perceived value (higher perceived value can reduce sensitivity to price changes), income level (higher income can reduce the impact of price changes), availability of alternatives (more options can increase price sensitivity), customer loyalty (loyal customers can tolerate price increases better), and claims history (positive claims experience can reduce switching due to price increases).
+-   Pricing strategy recommendations: Several strategies are recommended to optimize pricing and retain customers while maintaining profitability. A segmented pricing approach based on customer demographics, loyalty and claims history can better align with customers' willingness to pay. Clearly communicating the value and benefits of the policy, such as customer service, coverage and claims support, can help justify the price. Improving loyalty programmed to reward long-term customers can reduce the likelihood of switching due to price increases. Conducting regular competitive analysis will ensure that pricing remains both competitive and profitable. Using data analytics to offer personalized discounts or bundled packages can provide better value for money. Maintaining price transparency and explaining the reasons for any price changes can build customer trust. Implementing these strategies can effectively balance customer retention and profitability.
+
+# Reference
+
+-   Hähnchen, A. and Baumgartner, B. (2020) 'The impact of price bundling on the evaluation of bundled products: Does it matter how you frame it?', Schmalenbach Business Review, 72(1), pp. 39--63. doi:10.1007/s41464-020-00082-2.
+-   Major, V.J., Jethani, N. and Aphinyanaphongs, Y. (2020) Estimating real-world performance of a predictive model: A case-study in predicting mortality, OUP Academic. Available at: https://doi.org/10.1093/jamiaopen/ooaa008
+-   Tuffney, K. (2023) How does the value of my car affect my car insurance premium?, Comparoo. Available at: https://comparoo.uk/car-insurance/value-of-my-car/
+-   Akoglu, H., 2018. User's guide to correlation coefficients. Turkish journal of emergency medicine, 18(3), pp.91-93.
+-   Anderson, D.R., Sweeney, D.J., Williams, T.A., Camm, J.D. and Cochran, J.J., 2016. Statistics for business & economics. Cengage Learning.
+-   Asmus, E.P. and Radocy, R.E., 2017. Quantitative analysis. In Critical Essays in Music Education (pp. 129-172). Routledge.
+-   Best, H. and Wolf, C., 2015. Logistic regression. The SAGE handbook of regression analysis and causal inference, pp.153-171.
+-   Bolancé, C., Guillen, M. and Padilla-Barreto, A.E., 2016. Predicting probability of customer churn in insurance. In Modeling and Simulation in Engineering,
+-   Economics and Management: International Conference, MS 2016, Teruel, Spain, July 4-5, 2016, Proceedings (pp. 82-91). Springer International Publishing.
+-   Boodhun, N. and Jayabalan, M., 2018. Risk prediction in life insurance industry using supervised learning algorithms. Complex & Intelligent Systems, 4(2), pp.145-154.
+-   Ali, B.J. and Anwar, G. (2021) 'Marketing strategy: Pricing strategies and its influence on consumer purchasing decision', International Journal of Rural Development, Environment and Health Research, 5(2). doi:10.22161/ijreh.5.2.4.
+-   Duan, Z. et al. (2018) 'A logistic regression-based auto insurance rate-making model designed for the Insurance Rate Reform', International Journal of Financial Studies, 6(1). doi:10.3390/ijfs6010018.
